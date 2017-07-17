@@ -4,6 +4,13 @@ import requests
 import time
 import subprocess
 from secrets import TOKEN
+import logging
+
+
+logging.basicConfig(level=logging.WARN,
+                    format='%(asctime)s [%(name)s] [%(levelname)s] %(message)s')
+LOG = logging.getLogger('dropbox-tool')
+LOG.setLevel(logging.DEBUG)
 
 
 class Watcher:
@@ -37,12 +44,15 @@ class Watcher:
             time.sleep(self.rate)
             hash = self._get_hash()
             if self.hash != hash:
-                print('changed')
+                if self.hash is None:
+                    LOG.info('no previous hash to compare, triggering action')
+                else:
+                    LOG.info('hash changed')
                 self._download()
                 self._do_command()
                 self._upload()
             else:
-                print('no change')
+                LOG.debug('hash did not change')
             self.hash = hash
 
     def _download(self):
@@ -61,7 +71,7 @@ class Watcher:
         return self.dropbox.files_get_metadata(self.watch_file).content_hash
 
 
-def main():
+def start():
     w = Watcher(
         watch_file='/Life/todo/todo.org',
         command=['emacs', 'runtime/todo.org', '--batch', '-f',
@@ -69,9 +79,23 @@ def main():
         local_path='./runtime/todo.org',
         upload_file='./runtime/todo.html',
         upload_path='/Life/todo/todo.html',
-        rate=3
+        rate=5
     )
     w.run()
+
+
+def main():
+    while True:
+        try:
+            start()
+        except (KeyboardInterrupt, SystemExit):
+            LOG.info('Exiting on Keyboard Interrupt')
+            return()
+        except Exception as e:
+            LOG.exception("Logging an uncaught exception", e)
+            LOG.info('retrying in 30 seconds')
+            time.sleep(30)
+
 
 if __name__ == '__main__':
     main()
